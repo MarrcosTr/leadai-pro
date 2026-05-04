@@ -733,7 +733,16 @@ function SearchPage({ onLeadsFound, plan }) {
     setLoading(true);setDone(false);
     const steps=["🔍 Buscando no Google Maps...","✅ 47 estabelecimentos encontrados","🧹 Filtrando por critérios...","📱 Validando números WhatsApp...","🤖 IA analisando avaliações...","✨ Score de oportunidade gerado!"];
     for(const s of steps){setStep(s);await new Promise(r=>setTimeout(r,800));}
-    onLeadsFound(MOCK_LEADS);setLoading(false);setDone(true);
+   const serpKey = getLs("cfg_serpKey","");
+const geminiKey = getLs("cfg_geminiKey","");
+if(!serpKey||!geminiKey){alert("Configure suas chaves em Perfil → Configurações!");setLoading(false);return;}
+try{
+  const resp=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({niche:form.niche,city:form.city,minRating:form.minRating,minReviews:form.minReviews,serpKey,geminiKey})});
+  const result=await resp.json();
+  if(result.error)throw new Error(result.error);
+  onLeadsFound(result.leads);
+}catch(e){alert("Erro: "+e.message);}
+setLoading(false);setDone(true);
   };
   return (
     <div className="pb-24 slide-in">
