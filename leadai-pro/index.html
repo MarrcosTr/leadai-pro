@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>LeadAI Pro — Prospecção Inteligente</title>
+  <meta name="theme-color" content="#6366f1"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:#0f0f1a;color:#f1f5f9}
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#1e1e2e}::-webkit-scrollbar-thumb{background:#6366f1;border-radius:4px}
+    .glass{background:rgba(255,255,255,0.05);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1)}
+    .glass-dark{background:rgba(0,0,0,0.4);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.08)}
+    .glow{box-shadow:0 0 24px rgba(99,102,241,0.35)}
+    .glow-green{box-shadow:0 0 20px rgba(34,197,94,0.3)}
+    .glow-gold{box-shadow:0 0 24px rgba(251,191,36,0.4)}
+    .gradient-text{background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .gradient-btn{background:linear-gradient(135deg,#6366f1,#a855f7);transition:all .2s}
+    .gradient-btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+    .gradient-gold{background:linear-gradient(135deg,#f59e0b,#ef4444)}
+    .gradient-teal{background:linear-gradient(135deg,#14b8a6,#6366f1)}
+    .card-hover{transition:all .2s}.card-hover:hover{transform:translateY(-2px);border-color:rgba(99,102,241,.5)!important}
+    .spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    .pulse-dot{animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .slide-in{animation:slideIn .35s ease}@keyframes slideIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+    .slide-up{animation:slideUp .4s cubic-bezier(.34,1.56,.64,1)}@keyframes slideUp{from{opacity:0;transform:translateY(40px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+    .fade-in{animation:fadeIn .4s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    .pop-in{animation:popIn .35s cubic-bezier(.34,1.56,.64,1)}@keyframes popIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+    .shake{animation:shake .4s}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+    .timeline-line{position:relative}.timeline-line::before{content:'';position:absolute;left:8px;top:24px;bottom:0;width:2px;background:linear-gradient(180deg,rgba(99,102,241,.4),transparent)}
+    .onboard-bg{background:radial-gradient(ellipse at top,rgba(99,102,241,.2) 0%,transparent 70%)}
+    .tip-box{border-left:3px solid #6366f1}
+    input,select,textarea{color:#f1f5f9!important}
+    input::placeholder,textarea::placeholder{color:#6b7280!important}
+    option{background:#1e1e2e}
+    textarea{resize:none}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ─── CONFIG ───────────────────────────────────────────────────
+const SUPABASE_URL  = "https://SEU_PROJECT_ID.supabase.co";  // ← troque
+const SUPABASE_ANON = "sua_anon_key_aqui";                    // ← troque
+const ASAAS_ENV     = "sandbox"; // troque para "production" ao lançar
+
+function getStoredSession() { try { return JSON.parse(localStorage.getItem("leadai_session")||"null"); } catch { return null; } }
+function storeSession(s) { s ? localStorage.setItem("leadai_session",JSON.stringify(s)) : localStorage.removeItem("leadai_session"); }
+function getLs(k,d) { try { const v=localStorage.getItem(k); return v!=null?JSON.parse(v):d; } catch { return d; } }
+function setLs(k,v) { localStorage.setItem(k,JSON.stringify(v)); }
+
+async function sbFetch(path,opts={}) {
+  const session=getStoredSession();
+  const headers={"apikey":SUPABASE_ANON,"Content-Type":"application/json",...(session?.access_token?{"Authorization":`Bearer ${session.access_token}`}:{}),...(opts.headers||{})};
+  const res=await fetch(`${SUPABASE_URL}${path}`,{...opts,headers});
+  const text=await res.text();
+  try{return{ok:res.ok,status:res.status,data:JSON.parse(text)};}
+  catch{return{ok:res.ok,status:res.status,data:text};}
+}
+
+// ─── DADOS ───────────────────────────────────────────────────
+const now = Date.now();
+const MOCK_LEADS = [
+  { id:1, name:"Clínica Estética Bella Vita", segment:"Clínica de Estética", city:"São Paulo", phone:"(11) 98765-4321", has_whatsapp:true, rating:3.8, review_count:127, website:null, status:"new",
+    pain_points:["demora no agendamento","dificuldade para marcar horário","atendimento demorado"],
+    ai_score:94, ai_message:"Vi que vários clientes comentaram sobre dificuldade de agendamento na sua clínica — tenho uma solução que resolve isso em 5 minutos e já ajudou mais de 200 clínicas a dobrar os agendamentos online.", score_label:"Quente 🔥",
+    history:[{type:"extracted",label:"Lead extraído",ts:now-7*86400000},{type:"ai",label:"Score de IA gerado: 94 pts",ts:now-7*86400000+60000}] },
+  { id:2, name:"Restaurante Sabor & Arte", segment:"Restaurante", city:"São Paulo", phone:"(11) 97654-3210", has_whatsapp:true, rating:4.1, review_count:89, website:null, status:"sent",
+    pain_points:["demora na entrega","sistema de pedidos confuso"],
+    ai_score:78, ai_message:"Notei que clientes mencionam demora nos pedidos no seu restaurante — nossa plataforma reduziu o tempo de atendimento em 40% para mais de 150 restaurantes.", score_label:"Morno ⚡",
+    history:[{type:"extracted",label:"Lead extraído",ts:now-5*86400000},{type:"ai",label:"Score de IA gerado: 78 pts",ts:now-5*86400000+60000},{type:"sent",label:"Mensagem enviada via WhatsApp",ts:now-3*86400000}] },
+  { id:3, name:"Salão Hair Studio", segment:"Salão de Beleza", city:"Campinas", phone:"(19) 99887-7665", has_whatsapp:true, rating:4.5, review_count:312, website:"hairstudio.com.br", status:"replied",
+    pain_points:["agendamento só por telefone","cancelamentos frequentes"],
+    ai_score:65, ai_message:"Seu salão tem ótimas avaliações! Vi que alguns clientes gostariam de agendar online — posso mostrar como implementar isso em menos de 1 dia.", score_label:"Morno ⚡",
+    history:[{type:"extracted",label:"Lead extraído",ts:now-10*86400000},{type:"ai",label:"Score de IA gerado: 65 pts",ts:now-10*86400000+60000},{type:"sent",label:"Mensagem enviada via WhatsApp",ts:now-8*86400000},{type:"replied",label:"Lead respondeu a mensagem",ts:now-6*86400000}] },
+  { id:4, name:"Academia FitLife", segment:"Academia", city:"São Paulo", phone:"(11) 93322-1100", has_whatsapp:true, rating:3.5, review_count:198, website:null, status:"new",
+    pain_points:["não tem app","aulas sem horário fixo","musculação sempre lotada"],
+    ai_score:91, ai_message:"Muitos alunos reclamam da falta de um app para acompanhar treinos na sua academia — temos uma solução white-label que seus alunos vão amar, pronta em 24h.", score_label:"Quente 🔥",
+    history:[{type:"extracted",label:"Lead extraído",ts:now-2*86400000},{type:"ai",label:"Score de IA gerado: 91 pts",ts:now-2*86400000+60000}] },
+  { id:5, name:"Farmácia Saúde & Vida", segment:"Farmácia", city:"Guarulhos", phone:"(11) 96655-4433", has_whatsapp:true, rating:4.7, review_count:523, website:"farmaciasvida.com.br", status:"closed",
+    pain_points:["fila de espera"],
+    ai_score:45, ai_message:"Sua farmácia tem excelente reputação! Podemos ajudar a reduzir as filas com um sistema de senhas digital.", score_label:"Frio ❄️",
+    history:[{type:"extracted",label:"Lead extraído",ts:now-20*86400000},{type:"ai",label:"Score de IA gerado: 45 pts",ts:now-20*86400000+60000},{type:"sent",label:"Mensagem enviada via WhatsApp",ts:now-18*86400000},{type:"replied",label:"Lead respondeu",ts:now-16*86400000},{type:"closed",label:"Negócio fechado! 🏆",ts:now-14*86400000}] },
+];
+
+const PLANS = [
+  { id:"free",    label:"Free",    price:0,   maxLeads:10,  maxDisparos:3,     features:["10 leads/mês","3 disparos/mês","Score de IA básico","Suporte por email"], cta:"Plano Atual", badge:null, color:"gray" },
+  { id:"starter", label:"Starter", price:67,  maxLeads:100, maxDisparos:50,    features:["100 leads/mês","50 disparos/mês","Score de IA completo","Mensagem personalizada por IA","CRM completo","Suporte prioritário"], cta:"Assinar por R$ 67/mês", badge:"Mais popular 🔥", color:"indigo" },
+  { id:"pro",     label:"Pro",     price:147, maxLeads:500, maxDisparos:99999, features:["500 leads/mês","Disparos ilimitados","IA premium","Multi-nicho","Follow-up automático","API de integração","Onboarding dedicado"], cta:"Assinar por R$ 147/mês", badge:"⚡ IA Premium", color:"yellow" },
+];
+
+const KANBAN_COLS = [
+  { id:"new",     label:"Novos",     color:"#6366f1", icon:"⚡" },
+  { id:"sent",    label:"Enviado",   color:"#f59e0b", icon:"📤" },
+  { id:"replied", label:"Respondeu", color:"#3b82f6", icon:"💬" },
+  { id:"closed",  label:"Fechou",    color:"#22c55e", icon:"🏆" },
+];
+
+// Passos do onboarding
+const ONBOARD_STEPS = [
+  { icon:"🤖", title:"Bem-vindo ao LeadAI Pro!", sub:"Prospecção inteligente com Inteligência Artificial", body:"Encontre leads qualificados, analise o potencial de cada um com IA e envie mensagens personalizadas — tudo num único app que funciona no celular e no computador.", color:"from-indigo-500 to-purple-600" },
+  { icon:"🔍", title:"Extraia leads do Google Maps", sub:"Nicho + cidade + filtros = lista limpa", body:"Defina o segmento, a cidade, a nota mínima e o número de avaliações. O app busca, filtra e entrega os leads prontos para abordagem. Sem planilhas, sem trabalho manual.", color:"from-blue-500 to-cyan-500" },
+  { icon:"🧠", title:"Score de Oportunidade por IA", sub:"Saiba quem está pronto para comprar", body:"Nossa IA lê as avaliações reais do Google Maps de cada negócio, detecta as dores dos clientes e gera uma pontuação de 0-100. Você aborda primeiro quem tem mais chance de fechar.", color:"from-purple-500 to-pink-500" },
+  { icon:"💬", title:"Mensagem personalizada por IA", sub:"Parece escrita à mão, não spam", body:"Em vez de copiar e colar a mesma mensagem, a IA cria uma abordagem única para cada lead baseada nas avaliações reais. \"Vi que clientes comentaram sobre X no seu negócio...\"", color:"from-green-500 to-teal-500" },
+  { icon:"📊", title:"Mini-CRM com funil integrado", sub:"Nunca deixe um lead esfriar", body:"Após o disparo, acompanhe cada lead no funil: Enviado → Respondeu → Fechou. O app avisa quando é hora de fazer follow-up. Tudo no celular, de qualquer lugar.", color:"from-orange-500 to-red-500" },
+];
+
+// ─── HELPERS ─────────────────────────────────────────────────
+function timeAgo(ts) {
+  const d = (Date.now()-ts)/1000;
+  if(d<60) return "agora";
+  if(d<3600) return `${Math.floor(d/60)}min atrás`;
+  if(d<86400) return `${Math.floor(d/3600)}h atrás`;
+  return `${Math.floor(d/86400)}d atrás`;
+}
+function fmtDate(ts) {
+  return new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+}
+
+function ScoreRing({ score, size=60 }) {
+  const r=36,c=2*Math.PI*r,offset=c-(score/100)*c;
+  const color=score>=80?"#22c55e":score>=60?"#f59e0b":"#6b7280";
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r={r} fill="none" stroke="#1e1e2e" strokeWidth="8"/>
+      <circle cx="40" cy="40" r={r} fill="none" stroke={color} strokeWidth="8"
+        strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+        transform="rotate(-90 40 40)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
+      <text x="40" y="46" textAnchor="middle" fill={color} fontSize="16" fontWeight="bold">{score}</text>
+    </svg>
+  );
+}
+function Spinner() { return <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full spin inline-block"/>; }
+function Badge({ text, color="indigo" }) {
+  const c={indigo:"bg-indigo-500/20 text-indigo-300 border-indigo-500/30",green:"bg-green-500/20 text-green-300 border-green-500/30",yellow:"bg-yellow-500/20 text-yellow-300 border-yellow-500/30",red:"bg-red-500/10 text-red-300 border-red-500/20",gray:"bg-gray-500/20 text-gray-300 border-gray-500/30",purple:"bg-purple-500/20 text-purple-300 border-purple-500/30",blue:"bg-blue-500/20 text-blue-300 border-blue-500/30",teal:"bg-teal-500/20 text-teal-300 border-teal-500/30"};
+  return <span className={`text-xs px-2 py-0.5 rounded-full border ${c[color]||c.indigo}`}>{text}</span>;
+}
+
+// ─── 1. ONBOARDING ───────────────────────────────────────────
+function OnboardingModal({ onDone }) {
+  const [step, setStep] = useState(0);
+  const s = ONBOARD_STEPS[step];
+  const isLast = step === ONBOARD_STEPS.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-md fade-in">
+      <div className="glass-dark w-full max-w-sm rounded-3xl overflow-hidden pop-in">
+        {/* Barra de progresso */}
+        <div className="flex gap-1 p-4 pb-0">
+          {ONBOARD_STEPS.map((_,i)=>(
+            <div key={i} className={`flex-1 h-1 rounded-full transition-all duration-500 ${i<=step?'bg-indigo-400':'bg-white/10'}`}/>
+          ))}
+        </div>
+
+        {/* Ícone animado */}
+        <div className={`mx-auto mt-6 w-24 h-24 rounded-3xl bg-gradient-to-br ${s.color} flex items-center justify-center text-5xl pop-in glow`}
+          key={step} style={{boxShadow:`0 0 40px rgba(99,102,241,0.4)`}}>
+          {s.icon}
+        </div>
+
+        {/* Conteúdo */}
+        <div className="px-6 pt-5 pb-2 text-center" key={`c${step}`}>
+          <p className="text-xs text-indigo-400 font-semibold uppercase tracking-widest mb-1">Passo {step+1} de {ONBOARD_STEPS.length}</p>
+          <h2 className="text-xl font-black gradient-text mb-1">{s.title}</h2>
+          <p className="text-indigo-300 text-sm font-medium mb-3">{s.sub}</p>
+          <p className="text-gray-400 text-sm leading-relaxed">{s.body}</p>
+        </div>
+
+        {/* Dots */}
+        <div className="flex justify-center gap-2 mt-4">
+          {ONBOARD_STEPS.map((_,i)=>(
+            <button key={i} onClick={()=>setStep(i)}
+              className={`rounded-full transition-all duration-300 ${i===step?'w-6 h-2 bg-indigo-400':'w-2 h-2 bg-white/20'}`}/>
+          ))}
+        </div>
+
+        {/* Botões */}
+        <div className="p-5 flex gap-3">
+          <button onClick={onDone} className="flex-1 glass rounded-xl py-3 text-sm text-gray-400 border border-white/10 hover:text-white transition-all">
+            Pular
+          </button>
+          <button onClick={()=>isLast?onDone():setStep(s=>s+1)}
+            className={`flex-2 flex-grow gradient-btn rounded-xl py-3 font-bold text-white glow flex items-center justify-center gap-2`}>
+            {isLast?"🚀 Começar agora!":"Próximo →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 5. TIP BOX ──────────────────────────────────────────────
+const TIPS = {
+  search: { icon:"💡", title:"Dica de extração", text:"Escolha nichos com muitas avaliações negativas — são os leads mais quentes! Negócios com nota entre 3.0 e 4.0 têm mais dores ativas para resolver.", dismiss:"tip_search" },
+  leads:  { icon:"🎯", title:"Dica de abordagem", text:"Ordene por Score de IA e comece pelos leads acima de 80. A IA identificou dores reais que o seu produto resolve — a chance de resposta é 3x maior.", dismiss:"tip_leads" },
+  crm:    { icon:"📊", title:"Dica do funil", text:"Leads na etapa 'Enviado' há mais de 2 dias sem resposta precisam de follow-up. Um segundo contato aumenta a taxa de resposta em até 60%.", dismiss:"tip_crm" },
+  profile:{ icon:"🔑", title:"Configure as APIs", text:"Adicione sua chave Gemini (grátis em aistudio.google.com) para ativar o Score de IA real. Sem configurar, o app usa dados de demonstração.", dismiss:"tip_profile" },
+};
+function TipBox({ page }) {
+  const tip = TIPS[page];
+  const [visible, setVisible] = useState(!getLs(tip?.dismiss, false));
+  if (!tip || !visible) return null;
+  return (
+    <div className="mx-4 mb-3 glass rounded-xl p-3 tip-box border border-indigo-500/20 slide-in">
+      <div className="flex items-start gap-2">
+        <span className="text-lg flex-shrink-0">{tip.icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-indigo-300 mb-0.5">{tip.title}</p>
+          <p className="text-xs text-gray-400 leading-relaxed">{tip.text}</p>
+        </div>
+        <button onClick={()=>{ setLs(tip.dismiss,true); setVisible(false); }}
+          className="text-gray-600 hover:text-gray-400 text-lg leading-none ml-1 flex-shrink-0">✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── 3. INTERACTION HISTORY ──────────────────────────────────
+const HISTORY_META = {
+  extracted: { color:"#6366f1", icon:"📍", bg:"bg-indigo-500/20" },
+  ai:        { color:"#a855f7", icon:"🤖", bg:"bg-purple-500/20" },
+  sent:      { color:"#f59e0b", icon:"📤", bg:"bg-yellow-500/20" },
+  replied:   { color:"#3b82f6", icon:"💬", bg:"bg-blue-500/20"   },
+  closed:    { color:"#22c55e", icon:"🏆", bg:"bg-green-500/20"  },
+  note:      { color:"#6b7280", icon:"📝", bg:"bg-gray-500/20"   },
+};
+function InteractionHistory({ history=[], onAddNote }) {
+  const [note, setNote] = useState("");
+  const [showInput, setShowInput] = useState(false);
+  return (
+    <div className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">📅 Histórico de Interações</p>
+        <button onClick={()=>setShowInput(v=>!v)}
+          className="text-xs text-indigo-400 hover:text-indigo-300 glass px-2 py-1 rounded-lg border border-white/10 transition-all">
+          + Nota
+        </button>
+      </div>
+      {showInput && (
+        <div className="mb-3 slide-in">
+          <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} placeholder="Adicionar anotação sobre este lead..."
+            className="w-full glass rounded-xl px-3 py-2 text-sm outline-none border border-white/10 focus:border-indigo-500 mb-2"/>
+          <div className="flex gap-2">
+            <button onClick={()=>{ onAddNote(note); setNote(""); setShowInput(false); }}
+              className="flex-1 gradient-btn rounded-lg py-2 text-xs font-bold text-white">Salvar nota</button>
+            <button onClick={()=>setShowInput(false)} className="px-3 glass rounded-lg text-xs text-gray-400 border border-white/10">Cancelar</button>
+          </div>
+        </div>
+      )}
+      <div className="relative timeline-line space-y-3">
+        {[...history].reverse().map((h,i)=>{
+          const m = HISTORY_META[h.type] || HISTORY_META.note;
+          return (
+            <div key={i} className="flex gap-3 items-start relative z-10">
+              <div className={`w-5 h-5 rounded-full ${m.bg} flex items-center justify-center text-xs flex-shrink-0 mt-0.5`} style={{border:`1px solid ${m.color}40`}}>
+                <span style={{fontSize:"10px"}}>{m.icon}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-300 leading-tight">{h.label}</p>
+                <p className="text-[10px] text-gray-600 mt-0.5">{fmtDate(h.ts)}</p>
+              </div>
+              <span className="text-[10px] text-gray-600 flex-shrink-0">{timeAgo(h.ts)}</span>
+            </div>
+          );
+        })}
+        {history.length===0 && <p className="text-xs text-gray-600 py-2">Nenhuma interação registrada ainda.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ─── 2. LEAD MODAL COM PREVIEW DE MENSAGEM ───────────────────
+function LeadModal({ lead, onClose, onStatusChange, onUpdateLead }) {
+  const [tab, setTab] = useState("msg"); // msg | history
+  const [editMode, setEditMode] = useState(false);
+  const [editedMsg, setEditedMsg] = useState(lead.ai_message||"");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validated, setValidated] = useState(null);
+  const [msgSaved, setMsgSaved] = useState(false);
+
+  const handleSaveEdit = () => {
+    onUpdateLead(lead.id, { ai_message: editedMsg });
+    setEditMode(false);
+    setMsgSaved(true);
+    setTimeout(()=>setMsgSaved(false), 2000);
+  };
+  const handleConfirmSend = async () => {
+    setSending(true);
+    await new Promise(r=>setTimeout(r,1200));
+    const phone = (lead.phone||"").replace(/\D/g,"");
+    window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(editedMsg)}`,"_blank");
+    onStatusChange(lead.id,"sent");
+    onUpdateLead(lead.id,{ status:"sent", history:[...lead.history,{type:"sent",label:"Mensagem enviada via WhatsApp",ts:Date.now()}] });
+    setSending(false); setSent(true);
+  };
+  const handleValidate = async () => {
+    setValidating(true);
+    await new Promise(r=>setTimeout(r,1400));
+    setValidated(lead.has_whatsapp);
+    setValidating(false);
+  };
+  const handleAddNote = (note) => {
+    if(!note.trim()) return;
+    onUpdateLead(lead.id,{ history:[...lead.history,{type:"note",label:`📝 ${note}`,ts:Date.now()}] });
+  };
+  const scoreColor = lead.ai_score>=80?"text-green-400":lead.ai_score>=60?"text-yellow-400":"text-gray-400";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 bg-black/75 backdrop-blur-sm fade-in" onClick={onClose}>
+      <div className="glass-dark w-full max-w-md rounded-3xl border border-white/10 max-h-[93vh] overflow-y-auto slide-up" onClick={e=>e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-5 border-b border-white/8">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <ScoreRing score={lead.ai_score||0} size={56}/>
+              <div>
+                <p className="font-bold text-sm leading-tight">{lead.name}</p>
+                <p className="text-gray-400 text-xs">{lead.segment} · {lead.city}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  <Badge text={lead.score_label||"—"} color={lead.ai_score>=80?"green":lead.ai_score>=60?"yellow":"gray"}/>
+                  <Badge text={`⭐ ${lead.rating}`} color="indigo"/>
+                  {!lead.website && <Badge text="Sem site 🎯" color="purple"/>}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl mt-1 flex-shrink-0 w-8 h-8 flex items-center justify-center">✕</button>
+          </div>
+          {/* Tabs internas */}
+          <div className="flex glass rounded-xl p-1 mt-4">
+            {[["msg","💬 Mensagem & Envio"],["history","📅 Histórico"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setTab(v)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${tab===v?'gradient-btn text-white glow':'text-gray-400'}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        {tab==="msg" && (
+          <>
+            {/* Dores */}
+            <div className="px-5 pt-4 pb-3 border-b border-white/8">
+              <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">🎯 Dores Detectadas pela IA</p>
+              <div className="flex flex-wrap gap-1.5">{(lead.pain_points||[]).map(p=><Badge key={p} text={p} color="red"/>)}</div>
+            </div>
+
+            {/* Preview da mensagem com edição */}
+            <div className="px-5 pt-4 pb-4 border-b border-white/8">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-purple-400 uppercase tracking-wider">🤖 Preview da Mensagem</p>
+                <button onClick={()=>{ setEditMode(v=>!v); if(!editMode) setEditedMsg(lead.ai_message||""); }}
+                  className={`text-xs px-3 py-1 rounded-lg border transition-all ${editMode?'border-purple-500 bg-purple-500/20 text-purple-300':'border-white/10 text-gray-400 hover:border-white/30'}`}>
+                  {editMode?"✕ Cancelar":"✏️ Editar"}
+                </button>
+              </div>
+              {editMode ? (
+                <div className="slide-in">
+                  <div className="relative">
+                    <textarea value={editedMsg} onChange={e=>setEditedMsg(e.target.value)} rows={4}
+                      className="w-full glass rounded-xl px-4 py-3 text-sm border border-purple-500/40 outline-none focus:border-purple-400 leading-relaxed"/>
+                    <p className="text-right text-xs text-gray-600 mt-1">{editedMsg.length} caracteres</p>
+                  </div>
+                  <button onClick={handleSaveEdit}
+                    className="mt-2 w-full glass rounded-xl py-2.5 text-sm font-semibold text-purple-300 border border-purple-500/30 hover:bg-purple-500/10 transition-all flex items-center justify-center gap-2">
+                    {msgSaved?"✅ Mensagem salva!":"💾 Salvar edição"}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {/* Simulação de bubble WhatsApp */}
+                  <div className="bg-[#1e3a2e] rounded-2xl rounded-tl-sm px-4 py-3 border border-green-900/40 relative">
+                    <p className="text-sm text-gray-100 leading-relaxed">{editedMsg}</p>
+                    <div className="flex items-center justify-end gap-1 mt-2">
+                      <span className="text-[10px] text-gray-500">Agora</span>
+                      <span className="text-[10px] text-green-400">✓✓</span>
+                    </div>
+                    <div className="absolute -top-1 -left-1 w-3 h-3 bg-[#1e3a2e] border-l border-t border-green-900/40" style={{clipPath:"polygon(0 0,100% 0,100% 100%)"}}/>
+                  </div>
+                  {msgSaved && <p className="text-xs text-green-400 mt-1">✅ Edição salva!</p>}
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp */}
+            <div className="px-5 pt-4 pb-4 border-b border-white/8">
+              <p className="text-xs font-bold text-green-400 uppercase tracking-wider mb-3">📱 WhatsApp</p>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-mono text-sm">{lead.phone}</p>
+                  {validated!==null && <p className={`text-xs mt-1 ${validated?'text-green-400':'text-red-400'}`}>{validated?"✅ WhatsApp ativo":"❌ Sem WhatsApp"}</p>}
+                </div>
+                <button onClick={handleValidate} disabled={validating}
+                  className="text-xs px-3 py-2 glass rounded-lg border border-white/10 hover:border-white/30 transition-all">
+                  {validating?<Spinner/>:"🔍 Validar"}
+                </button>
+              </div>
+              {sent ? (
+                <div className="w-full bg-green-600/20 border border-green-500/30 rounded-xl py-3 text-center text-green-400 text-sm font-semibold">
+                  ✅ Mensagem enviada! Lead movido para "Enviado"
+                </div>
+              ) : (
+                <button onClick={handleConfirmSend} disabled={sending}
+                  className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded-xl py-3.5 font-bold text-sm transition-all flex items-center justify-center gap-2 glow-green">
+                  {sending?<><Spinner/> Abrindo WhatsApp...</>:<><span>💬</span> Confirmar e Enviar</>}
+                </button>
+              )}
+            </div>
+
+            {/* Funil */}
+            <div className="px-5 py-4">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">📊 Mover no Funil</p>
+              <div className="grid grid-cols-2 gap-2">
+                {KANBAN_COLS.map(col=>(
+                  <button key={col.id} onClick={()=>{ onStatusChange(lead.id,col.id); onClose(); }}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all border ${lead.status===col.id?'border-indigo-500 bg-indigo-500/20 text-indigo-300':'border-white/10 text-gray-400 hover:border-white/30'}`}>
+                    {col.icon} {col.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab==="history" && (
+          <InteractionHistory history={lead.history||[]} onAddNote={handleAddNote}/>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 4. CAMPAIGN REPORT ──────────────────────────────────────
+function CampaignReport({ leads }) {
+  const total    = leads.length;
+  const sent     = leads.filter(l=>l.status!=="new").length;
+  const replied  = leads.filter(l=>["replied","closed"].includes(l.status)).length;
+  const closed   = leads.filter(l=>l.status==="closed").length;
+  const convRate = sent>0 ? Math.round(closed/sent*100) : 0;
+  const respRate = sent>0 ? Math.round(replied/sent*100) : 0;
+  const hotCount = leads.filter(l=>l.ai_score>=80).length;
+
+  const bars = [
+    { label:"Extraídos", value:total,   color:"#6366f1", pct:100 },
+    { label:"Enviados",  value:sent,    color:"#f59e0b", pct:total>0?Math.round(sent/total*100):0 },
+    { label:"Respostas", value:replied, color:"#3b82f6", pct:total>0?Math.round(replied/total*100):0 },
+    { label:"Fechados",  value:closed,  color:"#22c55e", pct:total>0?Math.round(closed/total*100):0 },
+  ];
+
+  return (
+    <div className="px-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-bold text-sm">📈 Relatório da Campanha</h2>
+        <Badge text="Última busca" color="indigo"/>
+      </div>
+      <div className="glass rounded-2xl p-4 border border-white/5">
+        {/* Funil visual */}
+        <div className="space-y-3 mb-4">
+          {bars.map(b=>(
+            <div key={b.label} className="flex items-center gap-3">
+              <span className="text-xs text-gray-400 w-16 flex-shrink-0">{b.label}</span>
+              <div className="flex-1 h-5 bg-white/5 rounded-full overflow-hidden relative">
+                <div className="h-full rounded-full transition-all duration-1000"
+                  style={{width:`${b.pct}%`, background:`linear-gradient(90deg,${b.color}99,${b.color})`}}/>
+                <span className="absolute inset-0 flex items-center px-2 text-[10px] font-bold text-white">{b.value}</span>
+              </div>
+              <span className="text-xs font-bold w-8 text-right" style={{color:b.color}}>{b.pct}%</span>
+            </div>
+          ))}
+        </div>
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/8">
+          {[
+            { label:"Conv. Rate",  value:`${convRate}%`,  color:"text-green-400",  icon:"🏆" },
+            { label:"Resp. Rate",  value:`${respRate}%`,  color:"text-blue-400",   icon:"💬" },
+            { label:"Leads Quentes",value:hotCount,       color:"text-orange-400", icon:"🔥" },
+          ].map(k=>(
+            <div key={k.label} className="glass rounded-xl p-2 text-center border border-white/5">
+              <p className="text-sm mb-0.5">{k.icon}</p>
+              <p className={`font-black text-base ${k.color}`}>{k.value}</p>
+              <p className="text-gray-600 text-[10px]">{k.label}</p>
+            </div>
+          ))}
+        </div>
+        {convRate > 0 && (
+          <div className="mt-3 glass rounded-xl px-3 py-2 border border-green-500/20 flex items-center gap-2">
+            <span className="text-green-400">💡</span>
+            <p className="text-xs text-gray-400">
+              {convRate >= 20 ? "Excelente performance! Acima da média do mercado." :
+               convRate >= 10 ? "Boa taxa! Continue abordando leads quentes para melhorar." :
+               "Foque nos leads com Score > 80 para aumentar a conversão."}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AUTH SCREEN ─────────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode,setMode]=useState("login");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [name,setName]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const [success,setSuccess]=useState("");
+
+  const submit = async () => {
+    setError(""); setSuccess("");
+    if(!email||(!password&&mode!=="forgot")){setError("Preencha todos os campos");return;}
+    setLoading(true);
+    try {
+      if(mode==="login") {
+        const {ok,data}=await sbFetch("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email,password})});
+        if(!ok) throw new Error(data.error_description||"Credenciais inválidas");
+        storeSession(data); onAuth({session:data,user:data.user});
+      } else if(mode==="signup") {
+        if(!name){setError("Digite seu nome");setLoading(false);return;}
+        const {ok,data}=await sbFetch("/auth/v1/signup",{method:"POST",body:JSON.stringify({email,password,data:{full_name:name}})});
+        if(!ok) throw new Error(data.error_description||"Erro ao cadastrar");
+        if(data.access_token){storeSession(data);onAuth({session:data,user:data.user});}
+        else setSuccess("✅ Verifique seu email para confirmar!");
+      } else {
+        await sbFetch("/auth/v1/recover",{method:"POST",body:JSON.stringify({email})});
+        setSuccess("✅ Link enviado para seu email!");
+      }
+    } catch(e){setError(e.message);}
+    setLoading(false);
+  };
+
+  const demo = () => onAuth({session:{access_token:"demo"},user:{id:"demo",email:"demo@leadai.com",user_metadata:{full_name:"Usuário Demo"}}});
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#0f0f1a] relative overflow-hidden fade-in">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none"/>
+      <div className="absolute bottom-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"/>
+      <div className="mb-8 text-center">
+        <div className="w-16 h-16 gradient-btn rounded-2xl flex items-center justify-center text-3xl mb-3 mx-auto glow">🤖</div>
+        <h1 className="text-3xl font-black gradient-text">LeadAI Pro</h1>
+        <p className="text-gray-400 text-sm mt-1">Prospecção inteligente com IA</p>
+      </div>
+      <div className="glass rounded-3xl p-6 w-full max-w-sm border border-white/10">
+        <div className="flex glass rounded-xl p-1 mb-5">
+          {[["login","Entrar"],["signup","Cadastrar"]].map(([m,l])=>(
+            <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");}}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${mode===m?'gradient-btn text-white':'text-gray-400'}`}>{l}</button>
+          ))}
+        </div>
+        <div className="space-y-3">
+          {mode==="signup" && (
+            <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">NOME</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: João Silva"
+              className="w-full glass rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 border border-white/10"/></div>
+          )}
+          <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">EMAIL</label>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com"
+            className="w-full glass rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 border border-white/10"/></div>
+          {mode!=="forgot" && (
+            <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">SENHA</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo 8 caracteres"
+              className="w-full glass rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 border border-white/10"/></div>
+          )}
+          {error && <div className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 shake">{error}</div>}
+          {success && <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">{success}</div>}
+          <button onClick={submit} disabled={loading}
+            className="w-full gradient-btn rounded-2xl py-3.5 font-bold text-white flex items-center justify-center gap-2 glow disabled:opacity-50">
+            {loading?<><Spinner/> Aguarde...</>:mode==="login"?"🚀 Entrar":mode==="signup"?"✨ Criar conta":"📧 Enviar link"}
+          </button>
+          {mode==="login" && <button onClick={()=>setMode("forgot")} className="w-full text-xs text-gray-500 hover:text-gray-300 py-1">Esqueci minha senha</button>}
+          <div className="flex items-center gap-3"><div className="flex-1 h-px bg-white/10"/><span className="text-xs text-gray-600">ou</span><div className="flex-1 h-px bg-white/10"/></div>
+          <button onClick={demo} className="w-full glass rounded-2xl py-3 text-sm text-gray-300 border border-white/10 hover:border-indigo-500/40 flex items-center justify-center gap-2 transition-all">
+            👀 Explorar em modo demo
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 mt-5 text-center max-w-xs">Ao criar conta você concorda com os Termos de Uso e Política de Privacidade</p>
+    </div>
+  );
+}
+
+// ─── PLANS SCREEN ────────────────────────────────────────────
+function PlansScreen({ currentPlan, onSelect, onBack }) {
+  const [loading,setLoading]=useState(null);
+  const [annual,setAnnual]=useState(false);
+  const select = async (plan) => {
+    if(plan.id==="free"||plan.id===currentPlan) return;
+    setLoading(plan.id); await new Promise(r=>setTimeout(r,1500)); onSelect(plan.id); setLoading(null);
+  };
+  return (
+    <div className="min-h-screen bg-[#0f0f1a] pb-10 fade-in">
+      <div className="sticky top-0 z-20 glass border-b border-white/10 px-4 py-3 flex items-center gap-3">
+        <button onClick={onBack} className="text-gray-400 hover:text-white text-xl">←</button>
+        <div><h1 className="font-bold gradient-text">Escolha seu Plano</h1><p className="text-xs text-gray-500">Cancele quando quiser</p></div>
+      </div>
+      <div className="px-4 pt-6">
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <span className={`text-sm ${!annual?'text-white font-semibold':'text-gray-500'}`}>Mensal</span>
+          <button onClick={()=>setAnnual(a=>!a)} className={`relative w-12 h-6 rounded-full transition-all ${annual?'bg-indigo-500':'bg-gray-700'}`}>
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${annual?'left-7':'left-1'}`}/>
+          </button>
+          <span className={`text-sm ${annual?'text-white font-semibold':'text-gray-500'}`}>Anual <Badge text="2 meses grátis" color="green"/></span>
+        </div>
+        <div className="space-y-4">
+          {PLANS.map(plan=>{
+            const isCurrent=plan.id===currentPlan;
+            const price=annual&&plan.price>0?Math.round(plan.price*10*.8/12):plan.price;
+            const isLoad=loading===plan.id;
+            return (
+              <div key={plan.id} className={`glass rounded-3xl overflow-hidden border transition-all ${plan.id==="starter"?'border-indigo-500/60 glow':isCurrent?'border-green-500/40':'border-white/10'}`}>
+                {plan.badge&&<div className={`px-4 py-2 text-xs font-bold text-center ${plan.id==="pro"?'gradient-gold':'gradient-btn'} text-white`}>{plan.badge}</div>}
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h2 className="font-black text-xl">{plan.label}</h2>
+                      <p className="text-3xl font-black gradient-text mt-1">{price===0?"R$ 0":`R$ ${price}`}{price>0&&<span className="text-sm text-gray-400 font-normal">/mês</span>}</p>
+                    </div>
+                    <div className="text-right"><p className="text-2xl font-black text-indigo-400">{plan.credits.toLocaleString()}</p><p className="text-xs text-gray-500">leads/mês</p></div>
+                  </div>
+                  <ul className="space-y-2 mb-4">{plan.features.map(f=><li key={f} className="flex items-start gap-2 text-sm text-gray-300"><span className="text-green-400 flex-shrink-0 mt-0.5">✓</span>{f}</li>)}</ul>
+                  <button onClick={()=>select(plan)} disabled={isCurrent||isLoad}
+                    className={`w-full rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 transition-all ${isCurrent?'bg-green-600/20 text-green-400 border border-green-500/30 cursor-default':plan.id==="pro"?'gradient-gold text-white glow-gold':plan.id==="starter"?'gradient-btn text-white glow':'glass border border-white/10 text-gray-400'}`}>
+                    {isLoad?<><Spinner/> Processando...</>:isCurrent?'✅ Plano Atual':plan.cta}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-6 glass rounded-2xl p-4 border border-white/5 text-center">
+          <p className="text-xs text-gray-500 font-semibold mb-2">🔒 Pagamento 100% Seguro</p>
+          <div className="flex justify-center gap-4 flex-wrap">{["🛡️ SSL","💳 Stripe","🔄 Cancele a qualquer hora","📧 Nota fiscal"].map(i=><span key={i} className="text-xs text-gray-600">{i}</span>)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────
+function Dashboard({ leads, user, plan, onNavigate, credits }) {
+  const hot=leads.filter(l=>l.ai_score>=80&&l.status==="new").sort((a,b)=>b.ai_score-a.ai_score);
+  const closed=leads.filter(l=>l.status==="closed").length;
+  const conv=leads.length>0?Math.round(closed/leads.length*100):0;
+  const planInfo=PLANS.find(p=>p.id===plan)||PLANS[0];
+  const creditPct=Math.round(credits/planInfo.credits*100);
+  const name=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário";
+  return (
+    <div className="pb-24 slide-in">
+      <div className="px-4 pt-6 pb-3 flex items-center justify-between">
+        <div>
+          <p className="text-gray-400 text-sm">Olá, {name.split(" ")[0]} 👋</p>
+          <h1 className="text-2xl font-black gradient-text">LeadAI Pro</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>onNavigate("plans")}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${plan==="pro"?'border-yellow-500/50 text-yellow-400 bg-yellow-500/10':plan==="starter"?'border-indigo-500/50 text-indigo-300 bg-indigo-500/10':'border-white/10 text-gray-400'}`}>
+            {plan==="pro"?"⚡ Pro":plan==="starter"?"🚀 Starter":"Free"}
+          </button>
+          <div className="w-9 h-9 rounded-full gradient-btn flex items-center justify-center text-lg glow">🤖</div>
+        </div>
+      </div>
+      {/* Créditos */}
+      <div className="px-4 mb-4">
+        <div className="glass rounded-2xl p-3 border border-white/5">
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-xs text-gray-400">Créditos do mês</span>
+            <span className="text-xs font-bold text-indigo-300">{credits}/{planInfo.credits}</span>
+          </div>
+          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" style={{width:`${creditPct}%`}}/>
+          </div>
+          {credits<planInfo.credits*.2&&<button onClick={()=>onNavigate("plans")} className="mt-1 text-xs text-yellow-400">⚠️ Créditos acabando — Upgrade →</button>}
+        </div>
+      </div>
+      {/* Stats */}
+      <div className="px-4 grid grid-cols-2 gap-3">
+        {[{label:"Total Leads",value:leads.length,icon:"📋",g:"from-indigo-600 to-indigo-800"},{label:"Enviados",value:leads.filter(l=>l.status!=="new").length,icon:"📤",g:"from-purple-600 to-purple-800"},{label:"Respostas",value:leads.filter(l=>["replied","closed"].includes(l.status)).length,icon:"💬",g:"from-blue-600 to-blue-800"},{label:"Fechamentos",value:closed,icon:"🏆",g:"from-green-600 to-green-800"}].map(s=>(
+          <div key={s.label} className="glass rounded-2xl p-4 card-hover">
+            <div className="flex justify-between items-center mb-1"><span className="text-2xl">{s.icon}</span><span className={`text-3xl font-black bg-gradient-to-r ${s.g} bg-clip-text text-transparent`}>{s.value}</span></div>
+            <p className="text-gray-500 text-xs">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {/* 4. Relatório de campanha */}
+      <CampaignReport leads={leads}/>
+      {/* Leads quentes */}
+      {hot.length>0&&(
+        <div className="px-4 mt-4">
+          <div className="flex justify-between items-center mb-3">
+            <p className="font-bold text-sm">🔥 Leads Quentes — Abordar Agora</p>
+            <button onClick={()=>onNavigate("leads")} className="text-indigo-400 text-xs">Ver todos →</button>
+          </div>
+          <div className="space-y-2">
+            {hot.slice(0,3).map(l=>(
+              <div key={l.id} className="glass rounded-xl p-3 card-hover border border-indigo-500/20 glow">
+                <div className="flex gap-3 items-center">
+                  <ScoreRing score={l.ai_score} size={48}/>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{l.name}</p>
+                    <p className="text-gray-400 text-xs">{l.segment} · {l.city}</p>
+                    <div className="flex gap-1 mt-1">{(l.pain_points||[]).slice(0,1).map(p=><Badge key={p} text={p} color="red"/>)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="px-4 mt-4">
+        <button onClick={()=>onNavigate("search")} className="w-full gradient-btn rounded-2xl py-4 font-bold text-white glow flex items-center justify-center gap-2">
+          🔍 Extrair Novos Leads com IA
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SEARCH PAGE ─────────────────────────────────────────────
+function SearchPage({ onLeadsFound, plan }) {
+  const [form,setForm]=useState({niche:"",city:"",radius:"10",minRating:"3.5",minReviews:"20",hasWebsite:"any"});
+  const [loading,setLoading]=useState(false);
+  const [step,setStep]=useState("");
+  const [done,setDone]=useState(false);
+  const niches=["Clínica de Estética","Salão de Beleza","Restaurante","Academia","Farmácia","Odontologia","Advocacia","Contabilidade","Auto Peças","Petshop"];
+  const run=async()=>{
+    if(!form.niche||!form.city){alert("Preencha nicho e cidade!");return;}
+    setLoading(true);setDone(false);
+    const steps=["🔍 Buscando no Google Maps...","✅ 47 estabelecimentos encontrados","🧹 Filtrando por critérios...","📱 Validando números WhatsApp...","🤖 IA analisando avaliações...","✨ Score de oportunidade gerado!"];
+    for(const s of steps){setStep(s);await new Promise(r=>setTimeout(r,800));}
+    onLeadsFound(MOCK_LEADS);setLoading(false);setDone(true);
+  };
+  return (
+    <div className="pb-24 slide-in">
+      <div className="px-4 pt-6 pb-2"><h1 className="text-xl font-bold gradient-text">🔍 Extrair Leads</h1><p className="text-gray-400 text-sm">Configure e deixa a IA trabalhar</p></div>
+      {/* 5. Tip Box */}
+      <div className="mt-2"><TipBox page="search"/></div>
+      <div className="px-4 space-y-4">
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">NICHO *</label>
+          <input value={form.niche} onChange={e=>setForm({...form,niche:e.target.value})} placeholder="Ex: Clínica de Estética..."
+            className="w-full glass rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 border border-white/10"/>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {niches.slice(0,6).map(n=>(
+              <button key={n} onClick={()=>setForm({...form,niche:n})}
+                className={`text-xs px-3 py-1 rounded-full border transition-all ${form.niche===n?'border-indigo-500 bg-indigo-500/20 text-indigo-300':'border-white/10 text-gray-500 hover:border-white/30'}`}>{n}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">CIDADE *</label>
+          <input value={form.city} onChange={e=>setForm({...form,city:e.target.value})} placeholder="Ex: São Paulo, Campinas..."
+            className="w-full glass rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 border border-white/10"/>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[["radius","RAIO (KM)",["5","10","20","50"].map(v=>({v,l:`${v} km`}))],["minRating","NOTA MÍNIMA ⭐",["2","2.5","3","3.5","4","4.5"].map(v=>({v,l:`≥ ${v}`}))],["minReviews","MIN. AVALIAÇÕES",["10","20","50","100"].map(v=>({v,l:`≥ ${v}`}))],["hasWebsite","TEM SITE?",[{v:"any",l:"Qualquer"},{v:"no",l:"Sem site 🎯"},{v:"yes",l:"Com site"}]]].map(([key,label,opts])=>(
+            <div key={key}>
+              <label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">{label}</label>
+              <select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} className="w-full glass rounded-xl px-3 py-3 text-sm outline-none border border-white/10 bg-transparent">
+                {opts.map(({v,l})=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+        {plan==="free"&&<div className="glass rounded-2xl p-4 border border-yellow-500/30"><p className="text-yellow-400 font-semibold text-sm mb-1">⚡ Funcionalidade Premium</p><p className="text-gray-400 text-xs mb-2">Plano Free limitado a 50 leads/mês sem análise avançada.</p><Badge text="Starter ou Pro para análise completa" color="yellow"/></div>}
+        {loading&&<div className="glass rounded-2xl p-4 border border-indigo-500/30"><div className="flex items-center gap-3 mb-2"><Spinner/><p className="text-sm text-indigo-300">{step}</p></div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-pulse" style={{width:"70%"}}/></div></div>}
+        {done&&<div className="glass rounded-2xl p-4 border border-green-500/30 glow-green"><p className="text-green-400 font-semibold">✅ {MOCK_LEADS.length} leads extraídos e analisados!</p><p className="text-gray-400 text-xs mt-1">Veja os resultados na aba Leads</p></div>}
+        <button onClick={run} disabled={loading} className="w-full gradient-btn rounded-2xl py-4 font-bold text-white glow flex items-center justify-center gap-2 disabled:opacity-50">
+          {loading?<><Spinner/> Processando...</>:<><span>🚀</span> Extrair e Analisar com IA</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── LEADS PAGE ──────────────────────────────────────────────
+function LeadsPage({ leads, onStatusChange, onUpdateLead }) {
+  const [filter,setFilter]=useState("all");
+  const [sort,setSort]=useState("score");
+  const [selected,setSelected]=useState(null);
+  const filtered=leads.filter(l=>filter==="all"||l.status===filter).sort((a,b)=>sort==="score"?(b.ai_score||0)-(a.ai_score||0):(b.rating||0)-(a.rating||0));
+  const sCol={new:"indigo",sent:"yellow",replied:"blue",closed:"green"};
+  const sLbl={new:"Novo",sent:"Enviado",replied:"Respondeu",closed:"Fechou"};
+  // Sincroniza modal com dados atualizados
+  const selectedLead = selected ? leads.find(l=>l.id===selected.id)||selected : null;
+  return (
+    <div className="pb-24 slide-in">
+      <div className="px-4 pt-6 pb-2"><h1 className="text-xl font-bold gradient-text">📋 Leads</h1><p className="text-gray-400 text-sm">{leads.length} leads com score de IA</p></div>
+      <TipBox page="leads"/>
+      <div className="px-4 mb-3">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[["all","Todos",leads.length],["new","Novos",leads.filter(l=>l.status==="new").length],["sent","Enviados",leads.filter(l=>l.status==="sent").length],["replied","Respostas",leads.filter(l=>l.status==="replied").length],["closed","Fechados",leads.filter(l=>l.status==="closed").length]].map(([v,l,n])=>(
+            <button key={v} onClick={()=>setFilter(v)} className={`whitespace-nowrap text-xs px-3 py-1.5 rounded-full border transition-all ${filter===v?'border-indigo-500 bg-indigo-500/20 text-indigo-300':'border-white/10 text-gray-500'}`}>{l} ({n})</button>
+          ))}
+          <button onClick={()=>setSort(s=>s==="score"?"rating":"score")} className="whitespace-nowrap text-xs px-3 py-1.5 rounded-full border border-white/10 text-gray-500 ml-1">
+            {sort==="score"?"🏅 Score":"⭐ Nota"}
+          </button>
+        </div>
+      </div>
+      <div className="px-4 space-y-3">
+        {filtered.map(l=>(
+          <div key={l.id} onClick={()=>setSelected(l)} className="glass rounded-2xl p-4 card-hover cursor-pointer border border-white/5 hover:border-indigo-500/30 transition-all">
+            <div className="flex gap-3 items-center">
+              <ScoreRing score={l.ai_score||0} size={52}/>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-sm truncate">{l.name}</p>
+                  <Badge text={sLbl[l.status]||l.status} color={sCol[l.status]||"gray"}/>
+                </div>
+                <p className="text-gray-400 text-xs">{l.segment} · {l.city}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs text-yellow-400">⭐ {l.rating}</span>
+                  <span className="text-xs text-gray-500">{l.review_count} avaliações</span>
+                  <span className={`text-xs ${l.has_whatsapp?"text-green-400":"text-red-400"}`}>{l.has_whatsapp?"✓ WA":"✗ WA"}</span>
+                </div>
+                {(l.pain_points||[]).length>0&&<div className="mt-1.5"><Badge text={`🎯 ${l.pain_points[0]}`} color="red"/></div>}
+                {/* Mini histórico */}
+                {(l.history||[]).length>0&&(
+                  <div className="flex items-center gap-1 mt-2 overflow-hidden">
+                    {[...l.history].slice(-3).map((h,i)=>{
+                      const m=HISTORY_META[h.type]||HISTORY_META.note;
+                      return <span key={i} className={`text-xs px-1.5 py-0.5 rounded ${m.bg}`} title={h.label}>{m.icon}</span>;
+                    })}
+                    {l.history.length>3&&<span className="text-xs text-gray-600">+{l.history.length-3}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {filtered.length===0&&<div className="text-center text-gray-500 py-12">Nenhum lead aqui</div>}
+      </div>
+      {selectedLead&&<LeadModal lead={selectedLead} onClose={()=>setSelected(null)} onStatusChange={onStatusChange} onUpdateLead={onUpdateLead}/>}
+    </div>
+  );
+}
+
+// ─── CRM PAGE ────────────────────────────────────────────────
+function CRMPage({ leads, onStatusChange, onUpdateLead }) {
+  const [selected,setSelected]=useState(null);
+  const selectedLead = selected ? leads.find(l=>l.id===selected.id)||selected : null;
+  return (
+    <div className="pb-24 slide-in">
+      <div className="px-4 pt-6 pb-2"><h1 className="text-xl font-bold gradient-text">📊 Funil CRM</h1><p className="text-gray-400 text-sm">Acompanhe cada lead no funil</p></div>
+      <TipBox page="crm"/>
+      <div className="px-4">
+        <div className="flex gap-3 overflow-x-auto pb-4 snap-x">
+          {KANBAN_COLS.map(col=>{
+            const colLeads=leads.filter(l=>l.status===col.id);
+            return (
+              <div key={col.id} className="snap-start flex-shrink-0 w-60">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2"><span>{col.icon}</span><span className="font-bold text-sm" style={{color:col.color}}>{col.label}</span></div>
+                  <span className="text-xs glass px-2 py-0.5 rounded-full border border-white/10">{colLeads.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {colLeads.map(l=>(
+                    <div key={l.id} onClick={()=>setSelected(l)} className="glass rounded-xl p-3 cursor-pointer card-hover border border-white/5" style={{borderLeft:`3px solid ${col.color}`}}>
+                      <p className="font-semibold text-xs">{l.name}</p>
+                      <p className="text-gray-500 text-xs truncate">{l.segment}</p>
+                      <div className="flex justify-between mt-2 items-center">
+                        <span className="text-xs text-gray-400">{l.phone}</span>
+                        <span className="text-xs font-bold" style={{color:l.ai_score>=80?"#22c55e":l.ai_score>=60?"#f59e0b":"#6b7280"}}>{l.ai_score}pts</span>
+                      </div>
+                      {/* Mini histórico no kanban */}
+                      {(l.history||[]).length>0&&(
+                        <div className="flex gap-1 mt-2">
+                          {[...l.history].slice(-3).map((h,i)=>{
+                            const m=HISTORY_META[h.type]||HISTORY_META.note;
+                            return <span key={i} className={`text-[10px] px-1 py-0.5 rounded ${m.bg}`}>{m.icon}</span>;
+                          })}
+                        </div>
+                      )}
+                      {col.id==="sent"&&<div className="mt-1 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-yellow-400 pulse-dot"/><span className="text-xs text-yellow-400">Follow-up em 2d</span></div>}
+                    </div>
+                  ))}
+                  {colLeads.length===0&&<div className="border-2 border-dashed border-white/5 rounded-xl p-4 text-center text-gray-600 text-xs">Sem leads</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="px-4">
+        <div className="glass rounded-2xl p-4">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">📈 Resumo</p>
+          {KANBAN_COLS.map(col=>{
+            const n=leads.filter(l=>l.status===col.id).length;
+            const pct=leads.length>0?Math.round(n/leads.length*100):0;
+            return (
+              <div key={col.id} className="flex items-center gap-3 mb-2">
+                <span className="text-xs text-gray-400 w-20">{col.label}</span>
+                <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${pct}%`,backgroundColor:col.color}}/></div>
+                <span className="text-xs text-gray-400 w-6 text-right">{n}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {selectedLead&&<LeadModal lead={selectedLead} onClose={()=>setSelected(null)} onStatusChange={onStatusChange} onUpdateLead={onUpdateLead}/>}
+    </div>
+  );
+}
+
+// ─── PROFILE PAGE ────────────────────────────────────────────
+function ProfilePage({ user, plan, credits, onNavigate, onLogout }) {
+  const [cfg,setCfg]=useState({geminiKey:"",serpKey:"",wahaUrl:"",produto:"",nicho:"",followup:"2"});
+  const [saved,setSaved]=useState(false);
+  const name=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário";
+  const planInfo=PLANS.find(p=>p.id===plan)||PLANS[0];
+  const save=()=>{setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  return (
+    <div className="pb-24 slide-in">
+      <div className="px-4 pt-6 pb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 gradient-btn rounded-full flex items-center justify-center text-2xl glow">{name[0]?.toUpperCase()||"U"}</div>
+          <div>
+            <p className="font-bold text-lg">{name}</p>
+            <p className="text-gray-400 text-sm">{user?.email}</p>
+            <button onClick={()=>onNavigate("plans")} className={`mt-1 text-xs px-3 py-1 rounded-full border font-semibold ${plan==="pro"?'border-yellow-500/50 text-yellow-400 bg-yellow-500/10':plan==="starter"?'border-indigo-500/50 text-indigo-300 bg-indigo-500/10':'border-white/10 text-gray-400'}`}>
+              {plan==="pro"?"⚡ Pro":plan==="starter"?"🚀 Starter":"Free — Upgrade"}
+            </button>
+          </div>
+        </div>
+      </div>
+      <TipBox page="profile"/>
+      <div className="px-4 space-y-4">
+        <div className="glass rounded-2xl p-4 border border-indigo-500/20">
+          <div className="flex justify-between items-center mb-2"><p className="font-semibold text-sm">Créditos restantes</p><p className="text-indigo-300 font-bold">{credits}/{planInfo.credits}</p></div>
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2"><div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" style={{width:`${Math.round(credits/planInfo.credits*100)}%`}}/></div>
+          <button onClick={()=>onNavigate("plans")} className="text-xs text-indigo-400">↑ Aumentar limite</button>
+        </div>
+        <div className="glass rounded-2xl p-4">
+          <p className="font-bold text-sm mb-4 gradient-text">🔑 Chaves de API</p>
+          <div className="space-y-3">
+            {[["geminiKey","Gemini API Key (IA — grátis)","AIza...","aistudio.google.com"],["serpKey","SerpAPI Key (extração Maps)","100 buscas grátis/mês","serpapi.com"],["wahaUrl","WAHA URL (WhatsApp)","https://meu-waha.railway.app","waha.devlike.pro"]].map(([k,l,ph,hint])=>(
+              <div key={k}>
+                <label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">{l}</label>
+                <input type="password" value={cfg[k]} onChange={e=>setCfg({...cfg,[k]:e.target.value})} placeholder={ph}
+                  className="w-full glass rounded-xl px-4 py-2.5 text-sm outline-none border border-white/10 focus:border-indigo-500"/>
+                <p className="text-xs text-gray-600 mt-0.5">{hint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="glass rounded-2xl p-4">
+          <p className="font-bold text-sm mb-4 gradient-text">🤖 Personalização da IA</p>
+          <div className="space-y-3">
+            <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">Meu produto / solução</label>
+            <input value={cfg.produto} onChange={e=>setCfg({...cfg,produto:e.target.value})} placeholder="Ex: sistema de agendamento online..."
+              className="w-full glass rounded-xl px-4 py-2.5 text-sm outline-none border border-white/10 focus:border-indigo-500"/></div>
+            <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">Nicho alvo</label>
+            <input value={cfg.nicho} onChange={e=>setCfg({...cfg,nicho:e.target.value})} placeholder="Ex: clínicas, salões..."
+              className="w-full glass rounded-xl px-4 py-2.5 text-sm outline-none border border-white/10 focus:border-indigo-500"/></div>
+            <div><label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">Dias até follow-up</label>
+            <select value={cfg.followup} onChange={e=>setCfg({...cfg,followup:e.target.value})} className="w-full glass rounded-xl px-4 py-2.5 text-sm outline-none border border-white/10 bg-transparent">
+              {["1","2","3","5","7"].map(v=><option key={v} value={v}>{v} dias</option>)}
+            </select></div>
+          </div>
+        </div>
+        <button onClick={save} className={`w-full rounded-2xl py-3.5 font-bold flex items-center justify-center gap-2 transition-all ${saved?'bg-green-600 glow-green':'gradient-btn glow'}`}>
+          {saved?"✅ Salvo!":"💾 Salvar Configurações"}
+        </button>
+        {plan!=="pro"&&<button onClick={()=>onNavigate("plans")} className="w-full gradient-gold rounded-2xl py-3.5 font-bold text-white glow-gold flex items-center justify-center gap-2">⚡ Fazer Upgrade de Plano</button>}
+        <button onClick={onLogout} className="w-full glass rounded-2xl py-3 text-gray-400 border border-white/10 hover:border-red-500/30 hover:text-red-400 transition-all text-sm flex items-center justify-center gap-2">🚪 Sair da conta</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── BOTTOM NAV ──────────────────────────────────────────────
+function BottomNav({ active, onChange }) {
+  const tabs=[{id:"dashboard",icon:"🏠",label:"Início"},{id:"search",icon:"🔍",label:"Buscar"},{id:"leads",icon:"📋",label:"Leads"},{id:"crm",icon:"📊",label:"CRM"},{id:"profile",icon:"👤",label:"Perfil"}];
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-40 glass border-t border-white/10">
+      <div className="flex max-w-lg mx-auto">
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>onChange(t.id)}
+            className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-all ${active===t.id?'text-indigo-400':'text-gray-600'}`}>
+            <span className="text-xl">{t.icon}</span>
+            <span className="text-[10px] font-medium">{t.label}</span>
+            {active===t.id&&<div className="w-1 h-1 rounded-full bg-indigo-400"/>}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+// ─── APP ROOT ────────────────────────────────────────────────
+function App() {
+  const [auth,setAuth]       = useState(null);
+  const [page,setPage]       = useState("dashboard");
+  const [leads,setLeads]     = useState(MOCK_LEADS);
+  const [plan,setPlan]       = useState("free");
+  const [credits,setCredits] = useState(48);
+  const [showOnboard,setShowOnboard] = useState(false);
+
+  useEffect(()=>{
+    const s=getStoredSession();
+    if(s?.access_token==="demo") setAuth({session:s,user:{id:"demo",email:"demo@leadai.com",user_metadata:{full_name:"Usuário Demo"}}});
+    else if(s?.user) setAuth({session:s,user:s.user});
+  },[]);
+
+  // Mostra onboarding na primeira vez
+  useEffect(()=>{
+    if(auth && !getLs("onboard_done",false)) setShowOnboard(true);
+  },[auth]);
+
+  const handleAuth   = (a) => { setAuth(a); storeSession({...a.session,user:a.user}); };
+  const handleLogout = () => { storeSession(null); setAuth(null); setPage("dashboard"); };
+  const handleOnboardDone = () => { setLs("onboard_done",true); setShowOnboard(false); };
+  const handleLeadsFound  = (l) => { setLeads(l); setPage("leads"); setCredits(c=>Math.max(0,c-1)); };
+  const handleStatus = (id,status) => setLeads(prev=>prev.map(l=>l.id===id?{...l,status}:l));
+  const handleUpdateLead = (id,updates) => setLeads(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));
+  const handlePlan   = (p) => { setPlan(p); setCredits(PLANS.find(x=>x.id===p)?.credits||50); setPage("dashboard"); };
+
+  if(!auth) return <AuthScreen onAuth={handleAuth}/>;
+
+  if(page==="plans") return (
+    <div className="min-h-screen bg-[#0f0f1a] max-w-lg mx-auto">
+      <div className="fixed inset-0 pointer-events-none"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"/></div>
+      <PlansScreen currentPlan={plan} onSelect={handlePlan} onBack={()=>setPage("profile")}/>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#0f0f1a] max-w-lg mx-auto relative">
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"/>
+        <div className="absolute bottom-20 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl"/>
+      </div>
+      {/* 1. Onboarding */}
+      {showOnboard && <OnboardingModal onDone={handleOnboardDone}/>}
+      <div className="relative z-10">
+        {page==="dashboard" && <Dashboard leads={leads} user={auth.user} plan={plan} credits={credits} onNavigate={setPage}/>}
+        {page==="search"    && <SearchPage onLeadsFound={handleLeadsFound} plan={plan}/>}
+        {page==="leads"     && <LeadsPage leads={leads} onStatusChange={handleStatus} onUpdateLead={handleUpdateLead}/>}
+        {page==="crm"       && <CRMPage leads={leads} onStatusChange={handleStatus} onUpdateLead={handleUpdateLead}/>}
+        {page==="profile"   && <ProfilePage user={auth.user} plan={plan} credits={credits} onNavigate={setPage} onLogout={handleLogout}/>}
+      </div>
+      <BottomNav active={page} onChange={setPage}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
