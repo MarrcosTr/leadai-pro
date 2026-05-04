@@ -621,7 +621,7 @@ function PlansScreen({ currentPlan, onSelect, onBack }) {
                       <h2 className="font-black text-xl">{plan.label}</h2>
                       <p className="text-3xl font-black gradient-text mt-1">{price===0?"R$ 0":`R$ ${price}`}{price>0&&<span className="text-sm text-gray-400 font-normal">/mês</span>}</p>
                     </div>
-                    <div className="text-right"><p className="text-2xl font-black text-indigo-400">{plan.credits.toLocaleString()}</p><p className="text-xs text-gray-500">leads/mês</p></div>
+                   <div className="text-right"><p className="text-2xl font-black text-indigo-400">{plan.maxLeads.toLocaleString()}</p><p className="text-xs text-gray-500">leads/mês</p></div>
                   </div>
                   <ul className="space-y-2 mb-4">{plan.features.map(f=><li key={f} className="flex items-start gap-2 text-sm text-gray-300"><span className="text-green-400 flex-shrink-0 mt-0.5">✓</span>{f}</li>)}</ul>
                   <button onClick={()=>select(plan)} disabled={isCurrent||isLoad}
