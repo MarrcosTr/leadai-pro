@@ -922,7 +922,7 @@ function ProfilePage({ user, plan, credits, onNavigate, onLogout }) {
   const [saved,setSaved]=useState(false);
   const name=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário";
   const planInfo=PLANS.find(p=>p.id===plan)||PLANS[0];
-  const save=()=>{setSaved(true);setTimeout(()=>setSaved(false),2000);};
+ const save=()=>{setLs("cfg_geminiKey",cfg.geminiKey);setLs("cfg_serpKey",cfg.serpKey);setLs("cfg_wahaUrl",cfg.wahaUrl);setLs("cfg_produto",cfg.produto);setLs("cfg_nicho",cfg.nicho);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   return (
     <div className="pb-24 slide-in">
       <div className="px-4 pt-6 pb-4">
