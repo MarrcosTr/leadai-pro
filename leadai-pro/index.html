@@ -918,7 +918,7 @@ function CRMPage({ leads, onStatusChange, onUpdateLead }) {
 
 // ─── PROFILE PAGE ────────────────────────────────────────────
 function ProfilePage({ user, plan, credits, onNavigate, onLogout }) {
-  const [cfg,setCfg]=useState({geminiKey:"",serpKey:"",wahaUrl:"",produto:"",nicho:"",followup:"2"});
+  const [cfg,setCfg]=useState({geminiKey:getLs("cfg_geminiKey",""),serpKey:getLs("cfg_serpKey",""),wahaUrl:getLs("cfg_wahaUrl",""),produto:getLs("cfg_produto",""),nicho:getLs("cfg_nicho",""),followup:getLs("cfg_followup","2")});,wahaUrl:"",produto:"",nicho:"",followup:"2"});
   const [saved,setSaved]=useState(false);
   const name=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário";
   const planInfo=PLANS.find(p=>p.id===plan)||PLANS[0];
